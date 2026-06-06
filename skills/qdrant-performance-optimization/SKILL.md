@@ -1,6 +1,6 @@
 ---
 name: qdrant-performance-optimization
-description: "Different techniques to optimize the performance of Qdrant, including indexing strategies, query optimization, and hardware considerations. Use when you want to improve the speed and efficiency of your Qdrant deployment."
+description: "Different techniques to optimize the performance of Qdrant, including indexing strategies, query optimization, and hardware considerations. Use when someone asks 'how to improve Qdrant performance', 'search latency is high', 'queries are slow', 'uploads too slow', 'high memory usage', 'HNSW build time', or 'how to speed up Qdrant'. Also use when you want to improve the speed and efficiency of your Qdrant deployment."
 allowed-tools:
   - Read
   - Grep
@@ -35,3 +35,10 @@ Vector search can be memory intensive, especially when dealing with large datase
 Qdrant has a flexible memory management system, which allows you to precisely control which parts of storage are kept in memory and which are stored on disk. This can help you optimize memory usage without sacrificing performance.
 
 More on memory usage optimization can be found in the [Memory Usage Optimization](memory-usage-optimization/SKILL.md) skill.
+
+
+## Write Path Optimization
+
+Write performance depends on the `wait` parameter, shard count, replication factor, WAL queue depth, and the cost of updating already-indexed segments via Copy-on-Write.
+
+More on write path optimization can be found in the [Write Path Optimization](write-path-optimization/SKILL.md) skill.
