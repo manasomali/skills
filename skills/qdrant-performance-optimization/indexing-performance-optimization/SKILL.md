@@ -13,6 +13,7 @@ Qdrant does NOT build HNSW indexes immediately. Small segments use brute-force u
 ## Uploads/Ingestion Too Slow
 
 Use when: upload or upsert API calls are slow.
+
 Identify bottleneck: client-side (network, batching) vs server-side (CPU, disk I/O)
 
 For client-side, optimize batching and parallelism:
@@ -32,16 +33,19 @@ Suitable for initial bulk load of large datasets:
 
 Careful, fast unindexed upload might temporarily use more RAM and degrade search performance until optimizer catches up.
 
-See https://skills.qdrant.tech/md/documentation/tutorials-develop/bulk-upload/
+See [Bulk upload tutorial](https://skills.qdrant.tech/md/documentation/tutorials-develop/bulk-upload/)
 
 
 ## Optimizer Stuck or Taking Too Long
 
-Use when: optimizer running for hours, not finishing.
+Use when: optimizer running for hours, not finishing, or `optimizer_status` shows an error.
+
+Four conditions trigger optimization: segment exceeds `indexing_threshold_kb` (size optimizer), >20% tombstoned points (vacuum optimizer), 3+ small segments exist (merge optimizer), or config changed (config mismatch). Large merges and HNSW rebuilds legitimately take hours on big datasets.
+
+While a segment rebuilds, a proxy segment buffers incoming writes in memory. Heavy writes during optimization extend this list and slow down completion.
 
 - Check actual progress via optimizations endpoint (v1.17+) [Optimization monitoring](https://skills.qdrant.tech/md/documentation/ops-optimization/optimizer/?s=optimization-monitoring)
-- Large merges and HNSW rebuilds legitimately take hours on big datasets
-- Check CPU and disk I/O (HNSW is CPU-bound, merging is I/O-bound, HDD is not viable)
+- Check CPU and disk I/O: HNSW is CPU-bound, merging is I/O-bound, HDD is not viable for production indexing
 - If `optimizer_status` shows an error, check logs for disk full or corrupted segments
 
 
@@ -54,27 +58,31 @@ Use when: HNSW index build dominates total indexing time.
 - Keep `max_indexing_threads` proportional to CPU cores [Configuration](https://skills.qdrant.tech/md/documentation/ops-configuration/configuration/)
 - Use GPU for indexing [GPU indexing](https://skills.qdrant.tech/md/documentation/ops-configuration/running-with-gpu/)
 
-## HNSW index for multi-tenant collections
 
-If you have a multi-tenant use case where all data is split by some payload field (e.g. `tenant_id`), you can avoid building a global HNSW index and instead rely on `payload_m` to build HNSW index only for subsets of data.
-Skipping global HNSW index can significantly reduce indexing time.
+## Global HNSW Build Is Too Slow for Multi-Tenant Collections
 
-See [Multi-tenant collections](https://skills.qdrant.tech/md/documentation/manage-data/multitenancy/) for details.
+Use when: indexing time is unacceptable on a collection split by a tenant field (e.g. `tenant_id`).
+
+- Avoid building a global HNSW index; use `payload_m` to build per-tenant HNSW subgraphs only
+- Skipping the global index can significantly reduce indexing time
+
+See [Multi-tenant collections](https://skills.qdrant.tech/md/documentation/manage-data/multitenancy/)
+
 
 ## Additional Payload Indexes Are Too Slow
 
-Qdrant builds extra HNSW links for all payload indexes to ensure that quality of filtered vector search does not degrade.
-Some payload indexes (e.g. `text` fields with long texts) can have a very high number of unique values per point, which can lead to long HNSW build time.
+Use when: adding a new payload index causes disproportionately long re-indexing time.
 
-You can disable building extra HNSW links for specific payload index and instead rely on slightly slower query-time strategies like ACORN.
+Qdrant builds extra HNSW links per payload index. Text fields with long content or high cardinality generate huge numbers of unique values, making this very slow.
 
-Read more about disabling extra HNSW links in [documentation](https://skills.qdrant.tech/md/documentation/manage-data/indexing/?s=disable-the-creation-of-extra-edges-for-payload-fields)
+- Disable extra HNSW links for the problematic index and rely on query-time ACORN instead
+- Only create text indexes on fields you actually filter by
 
-Read more about ACORN in [documentation](https://skills.qdrant.tech/md/documentation/search/search/?s=acorn-search-algorithm)
+Read more: [disable extra edges](https://skills.qdrant.tech/md/documentation/manage-data/indexing/?s=disable-the-creation-of-extra-edges-for-payload-fields) | [ACORN](https://skills.qdrant.tech/md/documentation/search/search/?s=acorn-search-algorithm)
 
 
 ## What NOT to Do
 
 - Do not create payload indexes AFTER HNSW is built (breaks filterable vector index)
-- Do not use `m=0` for bulk uploads into an existing collection, it might drop the existing HNSW and cause long reindexing 
+- Do not use `m=0` for bulk uploads into an existing collection, it might drop the existing HNSW and cause long reindexing
 - Do not upload one point at a time (per-request overhead dominates)
